@@ -125,7 +125,7 @@ struct SettingsView: View {
 
     private func lightPorts(_ function: PortFunction, session: SBrickSession) -> String {
         let ports = MotorPort.allCases.filter {
-            settings.settings(for: $0, deviceID: session.id).function == function
+            settings.settings(for: $0, deviceID: session.id).function.contains(function)
         }
         return ports.isEmpty ? "None" : ports.map(\.rawValue).joined(separator: ", ")
     }
@@ -237,21 +237,22 @@ private struct LightPortSelectionView: View {
             Section {
                 ForEach(MotorPort.allCases) { port in
                     Toggle("Port \(port.rawValue)", isOn: Binding(
-                        get: { settings.settings(for: port, deviceID: session.id).function == function },
+                        get: { settings.settings(for: port, deviceID: session.id).function.contains(function) },
                         set: { selected in
                             sbrick.emergencyStop()
                             settings.update(port, deviceID: session.id) { configuration in
                                 if selected {
-                                    configuration.function = function
-                                } else if configuration.function == function {
-                                    configuration.function = .unused
+                                    configuration.function.remove(.motor)
+                                    configuration.function.insert(function)
+                                } else {
+                                    configuration.function.remove(function)
                                 }
                             }
                         }
                     ))
                 }
             } footer: {
-                Text("Select as many ports as needed. A port can have one function at a time.")
+                Text("Select as many ports as needed. The same port can be enabled for both forward and reverse lights.")
             }
         }
         .navigationTitle(function.title + "s")
@@ -355,11 +356,26 @@ private struct PortSetupView: View {
     var body: some View {
         Form {
             Section("Assignment") {
-                Picker("Function", selection: binding(\.function)) {
-                    ForEach(PortFunction.allCases) { function in
-                        Label(function.title, systemImage: function.symbol).tag(function)
+                Toggle("Motor", isOn: Binding(
+                    get: { configuration.function.contains(.motor) },
+                    set: { selected in
+                        updateFunction { function in
+                            if selected {
+                                function = .motor
+                            } else if function == .motor {
+                                function = .unused
+                            }
+                        }
                     }
-                }
+                ))
+                Toggle("Light when moving forward", isOn: Binding(
+                    get: { configuration.function.contains(.forwardLight) },
+                    set: { selected in updateLight(.forwardLight, selected: selected) }
+                ))
+                Toggle("Light when moving backward", isOn: Binding(
+                    get: { configuration.function.contains(.reverseLight) },
+                    set: { selected in updateLight(.reverseLight, selected: selected) }
+                ))
                 TextField("Port name", text: binding(\.name))
                 Toggle("Reverse output", isOn: binding(\.isReversed))
                 VStack(alignment: .leading) {
@@ -387,6 +403,24 @@ private struct PortSetupView: View {
             stopTest()
             settings.update(port, deviceID: session.id) { $0[keyPath: path] = value }
         })
+    }
+
+    private func updateFunction(_ change: (inout PortFunction) -> Void) {
+        stopTest()
+        settings.update(port, deviceID: session.id) { configuration in
+            change(&configuration.function)
+        }
+    }
+
+    private func updateLight(_ function: PortFunction, selected: Bool) {
+        updateFunction { current in
+            if selected {
+                current.remove(.motor)
+                current.insert(function)
+            } else {
+                current.remove(function)
+            }
+        }
     }
 
     private func testButton(_ title: String, value: Double) -> some View {
