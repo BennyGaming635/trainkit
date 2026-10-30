@@ -16,6 +16,7 @@ Native iOS and Android projects are included. The Android Studio project is in `
 - Supports simultaneous forward and reverse motor output
 - Assigns each port as a motor, forward light, reverse light, or unused output
 - Assigns multiple ports to forward or reverse directional lights
+- Sets independent positive or negative polarity for each forward and reverse light output
 - Includes hold-to-run forward/reverse port testing for every SBrick
 - Persists custom names, port functions, direction reversal, and output limits
 - Reads battery voltage from SBrick notifications

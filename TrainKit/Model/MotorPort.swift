@@ -34,13 +34,25 @@ struct PortSettings: Codable, Equatable {
     var isReversed: Bool
     var controlStyle: PortControlStyle
     var function: PortFunction
+    var forwardLightPolarity: OutputPolarity
+    var reverseLightPolarity: OutputPolarity
 
-    init(name: String, maximumPower: Double, isReversed: Bool, controlStyle: PortControlStyle, function: PortFunction = .motor) {
+    init(
+        name: String,
+        maximumPower: Double,
+        isReversed: Bool,
+        controlStyle: PortControlStyle,
+        function: PortFunction = .motor,
+        forwardLightPolarity: OutputPolarity = .positive,
+        reverseLightPolarity: OutputPolarity = .positive
+    ) {
         self.name = name
         self.maximumPower = maximumPower
         self.isReversed = isReversed
         self.controlStyle = controlStyle
         self.function = function
+        self.forwardLightPolarity = forwardLightPolarity
+        self.reverseLightPolarity = reverseLightPolarity
     }
 
     init(from decoder: Decoder) throws {
@@ -50,10 +62,46 @@ struct PortSettings: Codable, Equatable {
         isReversed = try container.decode(Bool.self, forKey: .isReversed)
         controlStyle = try container.decodeIfPresent(PortControlStyle.self, forKey: .controlStyle) ?? .slider
         function = try container.decodeIfPresent(PortFunction.self, forKey: .function) ?? .motor
+        let legacyPolarity: OutputPolarity = isReversed ? .negative : .positive
+        forwardLightPolarity = try container.decodeIfPresent(OutputPolarity.self, forKey: .forwardLightPolarity) ?? legacyPolarity
+        reverseLightPolarity = try container.decodeIfPresent(OutputPolarity.self, forKey: .reverseLightPolarity) ?? legacyPolarity
     }
 
     static func standard(for port: MotorPort) -> PortSettings {
         PortSettings(name: "Motor \(port.rawValue)", maximumPower: 1, isReversed: false, controlStyle: .slider)
+    }
+
+    func output(for throttle: Double, lightsEnabled: Bool) -> Double {
+        if function.contains(.motor) {
+            return throttle * maximumPower * (isReversed ? -1 : 1)
+        }
+
+        guard lightsEnabled, throttle != 0, function.isLight else { return 0 }
+        let lightFunction: PortFunction = throttle > 0 ? .forwardLight : .reverseLight
+        guard function.contains(lightFunction) else { return 0 }
+        let polarity = lightFunction == .forwardLight ? forwardLightPolarity : reverseLightPolarity
+        return maximumPower * polarity.multiplier
+    }
+}
+
+enum OutputPolarity: String, CaseIterable, Codable, Identifiable {
+    case positive
+    case negative
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .positive: "Positive"
+        case .negative: "Negative"
+        }
+    }
+
+    var multiplier: Double {
+        switch self {
+        case .positive: 1
+        case .negative: -1
+        }
     }
 }
 

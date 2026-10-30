@@ -31,6 +31,24 @@ final class ControllerSettingsTests: XCTestCase {
         let decoded = try JSONDecoder().decode(PortSettings.self, from: data)
         XCTAssertEqual(decoded.controlStyle, .slider)
         XCTAssertEqual(decoded.function, .motor)
+        XCTAssertEqual(decoded.forwardLightPolarity, .positive)
+        XCTAssertEqual(decoded.reverseLightPolarity, .positive)
+    }
+
+    func testLegacyReversedLightSettingsKeepTheirNegativeOutput() throws {
+        let data = try XCTUnwrap("""
+        {
+          "name": "Legacy light",
+          "maximumPower": 1,
+          "isReversed": true,
+          "controlStyle": "slider",
+          "function": "forwardLight"
+        }
+        """.data(using: .utf8))
+
+        let decoded = try JSONDecoder().decode(PortSettings.self, from: data)
+        XCTAssertEqual(decoded.forwardLightPolarity, .negative)
+        XCTAssertEqual(decoded.reverseLightPolarity, .negative)
     }
 
     func testPortFunctionSupportsBothLightDirectionsAndLegacyValues() throws {
@@ -62,14 +80,27 @@ final class ControllerSettingsTests: XCTestCase {
     }
 
     func testPortCanBeAssignedToBothLightDirections() throws {
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: "ControllerSettingsTests.\(UUID().uuidString)"))
+        let suiteName = "ControllerSettingsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = ControllerSettings(defaults: defaults)
         let id = UUID()
 
         settings.update(.b, deviceID: id) { $0.function = .forwardLight }
-        settings.update(.b, deviceID: id) { $0.function.insert(.reverseLight) }
+        settings.update(.b, deviceID: id) {
+            $0.function.insert(.reverseLight)
+            $0.forwardLightPolarity = .positive
+            $0.reverseLightPolarity = .negative
+        }
 
-        XCTAssertEqual(settings.settings(for: .b, deviceID: id).function, [.forwardLight, .reverseLight])
+        let reloaded = ControllerSettings(defaults: defaults)
+        let configuration = reloaded.settings(for: .b, deviceID: id)
+        XCTAssertEqual(configuration.function, [.forwardLight, .reverseLight])
+        XCTAssertEqual(configuration.forwardLightPolarity, .positive)
+        XCTAssertEqual(configuration.reverseLightPolarity, .negative)
+        XCTAssertEqual(configuration.output(for: 0.5, lightsEnabled: true), 1)
+        XCTAssertEqual(configuration.output(for: -0.5, lightsEnabled: true), -1)
+        XCTAssertEqual(configuration.output(for: 0.5, lightsEnabled: false), 0)
     }
 
     func testDeviceAliasPersistsByStableIdentifier() throws {

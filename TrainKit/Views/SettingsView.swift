@@ -236,27 +236,58 @@ private struct LightPortSelectionView: View {
         Form {
             Section {
                 ForEach(MotorPort.allCases) { port in
-                    Toggle("Port \(port.rawValue)", isOn: Binding(
-                        get: { settings.settings(for: port, deviceID: session.id).function.contains(function) },
-                        set: { selected in
-                            sbrick.emergencyStop()
-                            settings.update(port, deviceID: session.id) { configuration in
-                                if selected {
-                                    configuration.function.remove(.motor)
-                                    configuration.function.insert(function)
-                                } else {
-                                    configuration.function.remove(function)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Port \(port.rawValue)", isOn: Binding(
+                            get: { settings.settings(for: port, deviceID: session.id).function.contains(function) },
+                            set: { selected in
+                                sbrick.emergencyStop()
+                                settings.update(port, deviceID: session.id) { configuration in
+                                    if selected {
+                                        configuration.function.remove(.motor)
+                                        configuration.function.insert(function)
+                                    } else {
+                                        configuration.function.remove(function)
+                                    }
                                 }
                             }
+                        ))
+                        if settings.settings(for: port, deviceID: session.id).function.contains(function) {
+                            Picker("Output", selection: polarityBinding(for: port)) {
+                                ForEach(OutputPolarity.allCases) { polarity in
+                                    Text(polarity.title).tag(polarity)
+                                }
+                            }
+                            .pickerStyle(.segmented)
                         }
-                    ))
+                    }
                 }
             } footer: {
-                Text("Select as many ports as needed. The same port can be enabled for both forward and reverse lights.")
+                Text("Select as many ports as needed, then choose the output polarity for this direction. The same port can use opposite polarities for forward and reverse lighting.")
             }
         }
         .navigationTitle(function.title + "s")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func polarityBinding(for port: MotorPort) -> Binding<OutputPolarity> {
+        Binding(
+            get: {
+                let configuration = settings.settings(for: port, deviceID: session.id)
+                return function == .forwardLight
+                    ? configuration.forwardLightPolarity
+                    : configuration.reverseLightPolarity
+            },
+            set: { polarity in
+                sbrick.emergencyStop()
+                settings.update(port, deviceID: session.id) { configuration in
+                    if function == .forwardLight {
+                        configuration.forwardLightPolarity = polarity
+                    } else {
+                        configuration.reverseLightPolarity = polarity
+                    }
+                }
+            }
+        )
     }
 }
 
@@ -372,12 +403,24 @@ private struct PortSetupView: View {
                     get: { configuration.function.contains(.forwardLight) },
                     set: { selected in updateLight(.forwardLight, selected: selected) }
                 ))
+                if configuration.function.contains(.forwardLight) {
+                    Picker("Forward light output", selection: binding(\.forwardLightPolarity)) {
+                        ForEach(OutputPolarity.allCases) { Text($0.title).tag($0) }
+                    }
+                }
                 Toggle("Light when moving backward", isOn: Binding(
                     get: { configuration.function.contains(.reverseLight) },
                     set: { selected in updateLight(.reverseLight, selected: selected) }
                 ))
+                if configuration.function.contains(.reverseLight) {
+                    Picker("Reverse light output", selection: binding(\.reverseLightPolarity)) {
+                        ForEach(OutputPolarity.allCases) { Text($0.title).tag($0) }
+                    }
+                }
                 TextField("Port name", text: binding(\.name))
-                Toggle("Reverse output", isOn: binding(\.isReversed))
+                if configuration.function.contains(.motor) {
+                    Toggle("Reverse motor output", isOn: binding(\.isReversed))
+                }
                 VStack(alignment: .leading) {
                     LabeledContent("Maximum output", value: "\(Int(configuration.maximumPower * 100))%")
                     Slider(value: binding(\.maximumPower), in: 0.1...1, step: 0.05)
