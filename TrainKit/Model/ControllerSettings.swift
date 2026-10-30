@@ -22,6 +22,11 @@ struct LocomotiveProfile: Codable, Identifiable, Equatable {
     var photoData: Data?
 }
 
+private struct LocomotiveProfileLibrary: Codable {
+    var profiles: [LocomotiveProfile]
+    var assignments: [String: UUID]
+}
+
 final class ControllerSettings: ObservableObject {
     @Published private(set) var profiles: [String: [MotorPort: PortSettings]]
     @Published private(set) var deviceNames: [String: String]
@@ -40,6 +45,7 @@ final class ControllerSettings: ObservableObject {
     private let consistsStorageKey = "controller.consists.v1"
     private let locomotiveProfilesStorageKey = "controller.locomotive-profiles.v1"
     private let profileAssignmentsStorageKey = "controller.profile-assignments.v1"
+    private let profileLibraryStorageKey = "controller.locomotive-profile-library.v2"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -66,16 +72,21 @@ final class ControllerSettings: ObservableObject {
         } else {
             consists = []
         }
-        if let data = defaults.data(forKey: locomotiveProfilesStorageKey),
+        if let data = defaults.data(forKey: profileLibraryStorageKey),
+           let library = try? JSONDecoder().decode(LocomotiveProfileLibrary.self, from: data) {
+            locomotiveProfiles = library.profiles
+            assignedProfileIDs = library.assignments
+        } else if let data = defaults.data(forKey: locomotiveProfilesStorageKey),
            let decoded = try? JSONDecoder().decode([LocomotiveProfile].self, from: data) {
             locomotiveProfiles = decoded
+            if let data = defaults.data(forKey: profileAssignmentsStorageKey),
+               let decoded = try? JSONDecoder().decode([String: UUID].self, from: data) {
+                assignedProfileIDs = decoded
+            } else {
+                assignedProfileIDs = [:]
+            }
         } else {
             locomotiveProfiles = []
-        }
-        if let data = defaults.data(forKey: profileAssignmentsStorageKey),
-           let decoded = try? JSONDecoder().decode([String: UUID].self, from: data) {
-            assignedProfileIDs = decoded
-        } else {
             assignedProfileIDs = [:]
         }
     }
@@ -249,6 +260,7 @@ final class ControllerSettings: ObservableObject {
         defaults.removeObject(forKey: consistsStorageKey)
         defaults.removeObject(forKey: locomotiveProfilesStorageKey)
         defaults.removeObject(forKey: profileAssignmentsStorageKey)
+        defaults.removeObject(forKey: profileLibraryStorageKey)
     }
 
     private static func standardProfile() -> [MotorPort: PortSettings] {
@@ -266,6 +278,14 @@ final class ControllerSettings: ObservableObject {
     }
 
     private func persistLocomotiveProfiles() {
+        let library = LocomotiveProfileLibrary(
+            profiles: locomotiveProfiles,
+            assignments: assignedProfileIDs
+        )
+        if let data = try? JSONEncoder().encode(library) {
+            defaults.set(data, forKey: profileLibraryStorageKey)
+        }
+        // Keep the previous keys in sync so an older installed build can still read the library.
         if let data = try? JSONEncoder().encode(locomotiveProfiles) {
             defaults.set(data, forKey: locomotiveProfilesStorageKey)
         }

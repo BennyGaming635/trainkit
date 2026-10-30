@@ -2,6 +2,56 @@ import XCTest
 @testable import TrainKit
 
 final class ControllerSettingsTests: XCTestCase {
+    func testConnectingSecondTrainKeepsBothProfileAssignments() throws {
+        let suiteName = "ControllerSettingsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstTrain = UUID()
+        let secondTrain = UUID()
+        let settings = ControllerSettings(defaults: defaults)
+
+        let firstProfile = settings.saveCurrentSettingsAsProfile(named: "First Train", for: firstTrain)
+        settings.update(.a, deviceID: secondTrain) { $0.isReversed = true }
+        let secondProfile = settings.saveCurrentSettingsAsProfile(named: "Second Train", for: secondTrain)
+
+        XCTAssertEqual(settings.assignedProfile(for: firstTrain)?.id, firstProfile)
+        XCTAssertEqual(settings.assignedProfile(for: secondTrain)?.id, secondProfile)
+
+        let reloaded = ControllerSettings(defaults: defaults)
+        XCTAssertEqual(reloaded.assignedProfile(for: firstTrain)?.name, "First Train")
+        XCTAssertEqual(reloaded.assignedProfile(for: secondTrain)?.name, "Second Train")
+    }
+
+    func testMultipleLightPortsAndIndependentPolaritiesPersist() throws {
+        let suiteName = "ControllerSettingsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let train = UUID()
+        let settings = ControllerSettings(defaults: defaults)
+        let profileID = settings.saveCurrentSettingsAsProfile(named: "Passenger", for: train)
+
+        settings.update(.b, deviceID: train) {
+            $0.function = [.forwardLight, .reverseLight]
+            $0.forwardLightPolarity = .positive
+            $0.reverseLightPolarity = .negative
+        }
+        settings.update(.c, deviceID: train) {
+            $0.function = [.forwardLight, .reverseLight]
+            $0.forwardLightPolarity = .negative
+            $0.reverseLightPolarity = .positive
+        }
+
+        let reloaded = ControllerSettings(defaults: defaults)
+        XCTAssertEqual(reloaded.assignedProfile(for: train)?.id, profileID)
+        let portB = reloaded.settings(for: .b, deviceID: train)
+        let portC = reloaded.settings(for: .c, deviceID: train)
+        XCTAssertTrue(portB.function.contains(.forwardLight))
+        XCTAssertTrue(portB.function.contains(.reverseLight))
+        XCTAssertEqual(portB.output(for: 1, lightsEnabled: true), 1)
+        XCTAssertEqual(portB.output(for: -1, lightsEnabled: true), -1)
+        XCTAssertEqual(portC.output(for: 1, lightsEnabled: true), -1)
+        XCTAssertEqual(portC.output(for: -1, lightsEnabled: true), 1)
+    }
     func testMirroredFleetKeepsOneSharedControlLayout() throws {
         let suiteName = "ControllerSettingsTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
