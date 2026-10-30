@@ -33,6 +33,18 @@ final class ControllerSettingsTests: XCTestCase {
         XCTAssertEqual(decoded.function, .motor)
     }
 
+    func testPortFunctionSupportsBothLightDirectionsAndLegacyValues() throws {
+        let legacy = try JSONDecoder().decode(
+            PortFunction.self,
+            from: Data("\"forwardLight\"".utf8)
+        )
+        XCTAssertEqual(legacy, .forwardLight)
+
+        let combined: PortFunction = [.forwardLight, .reverseLight]
+        let data = try JSONEncoder().encode(combined)
+        XCTAssertEqual(try JSONDecoder().decode(PortFunction.self, from: data), combined)
+    }
+
     func testDeviceProfilesKeepIndependentPortAssignments() throws {
         let suiteName = "ControllerSettingsTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -47,6 +59,17 @@ final class ControllerSettingsTests: XCTestCase {
         XCTAssertEqual(settings.settings(for: .b, deviceID: freight).function, .motor)
         XCTAssertTrue(settings.settings(for: .b, deviceID: freight).isReversed)
         XCTAssertEqual(settings.settings(for: .b, deviceID: passenger).function, .forwardLight)
+    }
+
+    func testPortCanBeAssignedToBothLightDirections() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "ControllerSettingsTests.\(UUID().uuidString)"))
+        let settings = ControllerSettings(defaults: defaults)
+        let id = UUID()
+
+        settings.update(.b, deviceID: id) { $0.function = .forwardLight }
+        settings.update(.b, deviceID: id) { $0.function.insert(.reverseLight) }
+
+        XCTAssertEqual(settings.settings(for: .b, deviceID: id).function, [.forwardLight, .reverseLight])
     }
 
     func testDeviceAliasPersistsByStableIdentifier() throws {

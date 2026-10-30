@@ -57,30 +57,81 @@ struct PortSettings: Codable, Equatable {
     }
 }
 
-enum PortFunction: String, CaseIterable, Codable, Identifiable {
-    case motor
-    case forwardLight
-    case reverseLight
-    case unused
+struct PortFunction: OptionSet, Codable, Identifiable, Hashable {
+    let rawValue: Int
 
-    var id: String { rawValue }
+    static let motor = PortFunction(rawValue: 1 << 0)
+    static let forwardLight = PortFunction(rawValue: 1 << 1)
+    static let reverseLight = PortFunction(rawValue: 1 << 2)
+    static let unused = PortFunction()
 
-    var title: String {
-        switch self {
-        case .motor: "Motor"
-        case .forwardLight: "Forward light"
-        case .reverseLight: "Reverse light"
-        case .unused: "Unused"
+    var id: Int { rawValue }
+
+    var isLight: Bool {
+        contains(.forwardLight) || contains(.reverseLight)
+    }
+
+    init(rawValue: Int) {
+        self.rawValue = rawValue
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let rawValue = try? container.decode(Int.self) {
+            self.init(rawValue: rawValue)
+            return
+        }
+
+        let legacyValue = try container.decode(String.self)
+        switch legacyValue {
+        case "motor":
+            self = .motor
+        case "forwardLight":
+            self = .forwardLight
+        case "reverseLight":
+            self = .reverseLight
+        case "unused":
+            self = .unused
+        default:
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown port function")
         }
     }
 
-    var symbol: String {
-        switch self {
-        case .motor: "gearshape.2.fill"
-        case .forwardLight: "light.beacon.max.fill"
-        case .reverseLight: "light.beacon.min.fill"
-        case .unused: "minus.circle"
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
+    var title: String {
+        if self == .motor {
+            return "Motor"
         }
+        if self == .forwardLight {
+            return "Forward light"
+        }
+        if self == .reverseLight {
+            return "Reverse light"
+        }
+        if self == [.forwardLight, .reverseLight] {
+            return "Forward and reverse lights"
+        }
+        return "Unused"
+    }
+
+    var symbol: String {
+        if contains(.motor) {
+            return "gearshape.2.fill"
+        }
+        if self == [.forwardLight, .reverseLight] {
+            return "light.beacon.max.fill"
+        }
+        if contains(.forwardLight) {
+            return "light.beacon.max.fill"
+        }
+        if contains(.reverseLight) {
+            return "light.beacon.min.fill"
+        }
+        return "minus.circle"
     }
 }
 

@@ -185,14 +185,15 @@ struct ControllerView: View {
                 let configuration = settings.settings(for: port, deviceID: session.id)
                 let direction = configuration.isReversed ? -1.0 : 1.0
                 let output: Double
-                switch configuration.function {
-                case .motor:
+                if configuration.function.contains(.motor) {
                     output = value * configuration.maximumPower * direction
-                case .forwardLight:
-                    output = lightsAreEnabled(for: session.id) && value > 0 ? configuration.maximumPower * direction : 0
-                case .reverseLight:
-                    output = lightsAreEnabled(for: session.id) && value < 0 ? configuration.maximumPower * direction : 0
-                case .unused:
+                } else {
+                    let lightFunction: PortFunction = value > 0 ? .forwardLight : .reverseLight
+                    output = lightsAreEnabled(for: session.id) && value != 0 && configuration.function.contains(lightFunction)
+                        ? configuration.maximumPower * direction
+                        : 0
+                }
+                if !configuration.function.isLight && !configuration.function.contains(.motor) {
                     output = 0
                 }
                 sbrick.setSpeed(output, for: port, on: session)
