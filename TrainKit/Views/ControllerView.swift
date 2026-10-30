@@ -184,7 +184,7 @@ struct ControllerView: View {
             for port in MotorPort.allCases {
                 let configuration = settings.settings(for: port, deviceID: session.id)
                 let direction = configuration.isReversed ? -1.0 : 1.0
-                let output: Double
+                var output: Double
                 if configuration.function.contains(.motor) {
                     output = value * configuration.maximumPower * direction
                 } else {
